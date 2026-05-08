@@ -10,24 +10,31 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function loadCategories() {
+    const CACHE_KEY = "rs_categories_data";
+    const CACHE_TIME_KEY = "rs_categories_timestamp";
+    const EXPIRE_TIME = 60 * 1000;
+
     try {
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+        const now = Date.now();
+
+        if (cachedData && cachedTime && (now - cachedTime < EXPIRE_TIME)) {
+            const data = JSON.parse(cachedData);
+            renderCategories(data);
+            return;
+        }
+
         selectControl.control_input.placeholder = "กำลังโหลด RS AREA...";
         selectControl.disable();
 
         const res = await fetch(`${API_URL}?action=categories`);
         const data = await res.json();
-        
-        selectControl.clearOptions();
-        const options = data.map(i => ({ value: i, text: i }));
-        selectControl.addOptions(options);
 
-        const newPlaceholder = "ค้นหาหรือเลือกพื้นที่...";
-        selectControl.settings.placeholder = newPlaceholder;
-        selectControl.control_input.placeholder = newPlaceholder;
-        
-        selectControl.clearCache();
-        selectControl.sync(); 
-        selectControl.enable();
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        localStorage.setItem(CACHE_TIME_KEY, now.toString());
+
+        renderCategories(data);
 
     } catch (e) {
         console.error("Error:", e);
@@ -43,6 +50,20 @@ async function loadCategories() {
             confirmButtonText: 'ตกลง'
         });
     }
+}
+
+function renderCategories(data) {
+    selectControl.clearOptions();
+    const options = data.map(i => ({ value: i, text: i }));
+    selectControl.addOptions(options);
+
+    const newPlaceholder = "ค้นหาหรือเลือกพื้นที่...";
+    selectControl.settings.placeholder = newPlaceholder;
+    selectControl.control_input.placeholder = newPlaceholder;
+    
+    selectControl.clearCache();
+    selectControl.sync(); 
+    selectControl.enable();
 }
 
 function openCropModal(input, type) {
