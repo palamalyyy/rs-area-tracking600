@@ -1,63 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transportation Form</title>
+  <title>RS AREA H600</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="icon.ico" type="image/x-icon">
 </head>
 
 <body class="bg-gray-100 p-4 min-h-screen">
-
   <div class="max-w-xl mx-auto bg-white p-6 rounded-lg shadow-lg">
     <h2 class="text-2xl font-bold mb-6 text-center text-blue-700">บันทึกข้อมูลการขนส่ง</h2>
-
     <form id="transportForm" class="space-y-4">
       <div>
         <label class="block text-sm font-medium text-gray-700">RS AREA</label>
-        <select id="area" placeholder="เลือกหรือค้นหาพื้นที่..." autocomplete="off"></select>
+        <select id="area" placeholder="กำลังโหลดข้อมูลพื้นที่..." autocomplete="off" disabled></select>
       </div>
-
       <div>
-        <label class="block text-sm font-medium text-gray-700">Sender / ผู้ส่ง</label>
-        <input type="text" id="sender" class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
-          required>
+        <label class="block text-sm font-medium text-gray-700">ผู้ส่ง</label>
+        <input type="text" id="sender" class="w-full p-2 border rounded outline-none focus:ring-2 focus:ring-blue-500">
+        <div class="flex items-center mt-1">
+          <input type="checkbox" id="rememberMe" class="h-4 w-4 text-blue-600" checked>
+          <label for="rememberMe" class="ml-2 text-xs text-gray-500">จดจำชื่อผู้ส่ง</label>
+        </div>
       </div>
-      <div class="flex items-center mt-1">
-        <input type="checkbox" id="rememberMe" class="h-4 w-4 text-blue-600 border-gray-300 rounded" checked>
-        <label for="rememberMe" class="ml-2 text-xs text-gray-500">จดจำชื่อผู้ส่งในเครื่องนี้</label>
+      <div class="grid grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <label class="block text-sm font-medium">รูปภาพส่งของ</label>
+          <div onclick="document.getElementById('imageItems').click()"
+            class="border-2 border-dashed border-blue-300 rounded p-4 text-center cursor-pointer hover:bg-blue-50">
+            <span class="text-xs text-blue-500">คลิกเพื่อเลือกรูป</span>
+            <input type="file" id="imageItems" accept="image/*" class="hidden" onchange="openCropModal(this, 'items')">
+          </div>
+          <div id="previewItems" class="hidden relative"><img src="" class="w-full rounded border"><button type="button"
+              onclick="resetFile('items')"
+              class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6">✕</button></div>
+        </div>
+        <div class="space-y-2">
+          <label class="block text-sm font-medium">รูปใบส่งของ (บิล)</label>
+          <div onclick="document.getElementById('imageDoc').click()"
+            class="border-2 border-dashed border-blue-300 rounded p-4 text-center cursor-pointer hover:bg-blue-50">
+            <span class="text-xs text-blue-500">คลิกเพื่อเลือกรูป</span>
+            <input type="file" id="imageDoc" accept="image/*" class="hidden" onchange="openCropModal(this, 'doc')">
+          </div>
+          <div id="previewDoc" class="hidden relative"><img src="" class="w-full rounded border"><button type="button"
+              onclick="resetFile('doc')"
+              class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6">✕</button></div>
+        </div>
       </div>
-
       <div>
-        <label class="block text-sm font-medium text-gray-700">Picture / แนบรูปภาพส่งของ</label>
-        <input type="file" id="imageItems" accept="image/*" class="w-full p-1 text-sm border rounded mt-1 bg-gray-50">
-        <div id="previewItems" class="mt-2 hidden"><img src="" class="h-32 rounded border"></div>
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium text-gray-700">Picture / แนบรูปเอกสารใบส่งของ</label>
-        <input type="file" id="imageDoc" accept="image/*" class="w-full p-1 text-sm border rounded mt-1 bg-gray-50">
-        <div id="previewDoc" class="mt-2 hidden"><img src="" class="h-32 rounded border"></div>
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium text-gray-700">Remark / หมายเหตุเพิ่มเติม</label>
-        <textarea id="remark" rows="3"
+        <label class="block text-sm font-medium">หมายเหตุ</label>
+        <textarea id="remark" rows="2"
           class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
       </div>
-
       <button type="button" onclick="confirmSubmit()"
-        class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition shadow-md">
-        ส่งข้อมูล
-      </button>
+        class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition shadow-md">ส่งข้อมูล</button>
     </form>
   </div>
 
+  <div id="cropModal" class="fixed inset-0 z-50 hidden bg-black flex flex-col p-2 md:p-4 overflow-hidden">
+    <div class="flex justify-between items-center p-2 bg-gray-900 text-white rounded-t-lg z-10 relative shadow-md">
+      <button type="button" onclick="closeCropModal()"
+        class="px-4 py-2 bg-gray-600 rounded text-sm hover:bg-gray-700 transition">ยกเลิก</button>
+      <h3 class="text-base font-bold">ตัดรูปภาพ</h3>
+      <button type="button" onclick="applyCrop()"
+        class="px-4 py-2 bg-blue-500 rounded text-sm font-bold hover:bg-blue-600 transition shadow">ตกลง</button>
+    </div>
+
+    <div class="flex-1 relative bg-gray-200 overflow-hidden flex items-center justify-center p-4">
+      <div class="w-full h-full flex items-center justify-center">
+        <img id="cropImage" src="" style="max-width: 100%; display: block;">
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
   <script src="script.js"></script>
 </body>
 

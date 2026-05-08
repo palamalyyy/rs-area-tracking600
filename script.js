@@ -1,162 +1,185 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbycBFe5dGBFYHAQ3r73dzgzYqBSL1qZbnqusaCUVFiW6vvJQ_8_dA1t5gHhhzyE6uo/exec";
-
-let selectControl;
-let base64Items = "";
-let base64Doc = "";
+let selectControl, cropper, currentTargetType, isSubmitting = false;
+let base64Items = "", base64Doc = "";
 
 document.addEventListener("DOMContentLoaded", async () => {
-    selectControl = new TomSelect("#area", {
-        create: false,
-        sortField: { field: "text", order: "asc" }
-    });
-
+    selectControl = new TomSelect("#area", { create: false });
+    const savedSender = localStorage.getItem("rememberedSender");
+    if (savedSender) document.getElementById('sender').value = savedSender;
     await loadCategories();
 });
 
 async function loadCategories() {
     try {
+        selectControl.control_input.placeholder = "กำลังโหลด RS AREA...";
+        selectControl.disable();
+
         const res = await fetch(`${API_URL}?action=categories`);
         const data = await res.json();
-
-        const options = data.map(item => ({ value: item, text: item }));
+        
+        selectControl.clearOptions();
+        const options = data.map(i => ({ value: i, text: i }));
         selectControl.addOptions(options);
-    } catch (err) {
-        console.error("Failed to load categories", err);
+
+        const newPlaceholder = "ค้นหาหรือเลือกพื้นที่...";
+        selectControl.settings.placeholder = newPlaceholder;
+        selectControl.control_input.placeholder = newPlaceholder;
+        
+        selectControl.clearCache();
+        selectControl.sync(); 
+        selectControl.enable();
+
+    } catch (e) {
+        console.error("Error:", e);
+        const errorMsg = "โหลดข้อมูลล้มเหลว กรุณาตรวจสอบอินเตอร์เน็ตและรีหน้าเว็บอีกครั้ง";
+        selectControl.settings.placeholder = errorMsg;
+        selectControl.control_input.placeholder = errorMsg;
+        selectControl.sync();
+        
+        Swal.fire({
+            icon: 'error',
+            title: 'การโหลดข้อมูลขัดข้อง',
+            text: 'ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือ URL ของ API',
+            confirmButtonText: 'ตกลง'
+        });
     }
 }
 
-function handleFileSelect(evt, type) {
-    const file = evt.target.files[0];
-    if (!file) return;
-
+function openCropModal(input, type) {
+    if (!input.files || !input.files[0]) return;
+    currentTargetType = type;
+    
     const reader = new FileReader();
     reader.onload = (e) => {
-        if (type === 'items') {
-            base64Items = e.target.result;
-            document.getElementById('previewItems').classList.remove('hidden');
-            document.getElementById('previewItems').querySelector('img').src = e.target.result;
-        } else {
-            base64Doc = e.target.result;
-            document.getElementById('previewDoc').classList.remove('hidden');
-            document.getElementById('previewDoc').querySelector('img').src = e.target.result;
-        }
+        const img = document.getElementById('cropImage');
+        img.src = e.target.result;
+        
+        document.getElementById('cropModal').classList.remove('hidden');
+        
+        if (cropper) cropper.destroy();
+        cropper = new Cropper(img, { 
+            viewMode: 1, 
+            dragMode: 'move',
+            autoCropArea: 1,
+            responsive: true,
+            center: true,
+            restore: false
+        });
+        input.value = '';
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(input.files[0]);
 }
 
-document.getElementById('imageItems').addEventListener('change', (e) => handleFileSelect(e, 'items'));
-document.getElementById('imageDoc').addEventListener('change', (e) => handleFileSelect(e, 'doc'));
+function closeCropModal() {
+    document.getElementById('cropModal').classList.add('hidden');
+    if (cropper) cropper.destroy();
+}
+
+function applyCrop() {
+    const canvas = cropper.getCroppedCanvas({ maxWidth: 1600, maxHeight: 1600, imageSmoothingQuality: 'high' });
+    const b64 = canvas.toDataURL('image/jpeg', 0.85);
+    if (currentTargetType === 'items') {
+        base64Items = b64;
+        document.getElementById('previewItems').classList.remove('hidden');
+        document.getElementById('previewItems').querySelector('img').src = b64;
+    } else {
+        base64Doc = b64;
+        document.getElementById('previewDoc').classList.remove('hidden');
+        document.getElementById('previewDoc').querySelector('img').src = b64;
+    }
+    closeCropModal();
+}
+
+function resetFile(type) {
+    if (type === 'items') {
+        base64Items = ""; document.getElementById('imageItems').value = "";
+        document.getElementById('previewItems').classList.add('hidden');
+    } else {
+        base64Doc = ""; document.getElementById('imageDoc').value = "";
+        document.getElementById('previewDoc').classList.add('hidden');
+    }
+}
 
 async function confirmSubmit() {
     const area = document.getElementById('area').value;
     const sender = document.getElementById('sender').value;
-
-    if (!area || !sender) {
-        Swal.fire("แจ้งเตือน", "กรุณากรอก AREA และชื่อผู้ส่งให้ครบถ้วน", "warning");
-        return;
-    }
-
-    const result = await Swal.fire({
-        title: 'ยืนยันการส่งข้อมูล?',
-        text: "กรุณาตรวจสอบความถูกต้องของข้อมูลและรูปภาพ",
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#2563eb',
-        cancelButtonColor: '#d33',
-        confirmButtonText: 'ตกลง, ส่งข้อมูล!',
-        cancelButtonText: 'ยกเลิก'
-    });
-
-    if (result.isConfirmed) {
-        submitData();
-    }
+    if (!area || !sender) return Swal.fire("แจ้งเตือน", "กรุณาระบุพื้นที่และชื่อผู้ส่ง", "warning");
+    const res = await Swal.fire({ title: 'ยืนยันการส่ง?', text: "กรุณาตรวจรูปภาพและข้อมูล", icon: 'question', showCancelButton: true });
+    if (res.isConfirmed) submitData();
 }
-
-let isSubmitting = false;
 
 async function submitData() {
     if (isSubmitting) return;
     isSubmitting = true;
 
-    const senderValue = document.getElementById('sender').value;
-    const rememberMe = document.getElementById('rememberMe').checked;
-    if (rememberMe) {
-        localStorage.setItem("rememberedSender", senderValue);
-    } else {
-        localStorage.removeItem("rememberedSender");
+    const sender = document.getElementById('sender').value;
+    if (document.getElementById('rememberMe').checked) {
+        localStorage.setItem("rememberedSender", sender);
     }
 
-    const loadingMessages = [
-        "กำลังบันทึก...",
-        "กำลังอัปโหลดรูปภาพ (1/2)...",
-        "กำลังอัปโหลดรูปภาพ (2/2)...",
-        "ใกล้เสร็จแล้ว อีกอึดใจเดียว...",
-        "ระบบกำลังประมวลผลข้อมูลหนักเล็กน้อย..."
-    ];
-
-    let messageIndex = 0;
+    const msg = ["กำลังบันทึก...", "อัปโหลดรูปภาพ...", "ประมวลผลขั้นสุดท้าย..."];
+    let mi = 0;
 
     Swal.fire({
-        title: loadingMessages[0],
-        text: 'ใช้เวลาสักครู่ อยู่ที่ความเร็วอินเตอร์เน็ต',
+        title: msg[0],
         allowOutsideClick: false,
         showConfirmButton: false,
         didOpen: () => {
             Swal.showLoading();
-
-            const timerInterval = setInterval(() => {
-                messageIndex++;
-                if (messageIndex < loadingMessages.length) {
-                    Swal.update({
-                        title: loadingMessages[messageIndex]
-                    });
-                } else {
-                    clearInterval(timerInterval);
-                }
-            }, 4500);
-
-            Swal.timerInterval = timerInterval;
+            const ti = setInterval(() => {
+                mi++;
+                if (mi < msg.length) Swal.update({ title: msg[mi] });
+                else clearInterval(ti);
+            }, 4000);
+            Swal.ti = ti;
         }
     });
 
-    const payload = {
-        action: "create",
-        area: document.getElementById('area').value,
-        sender: senderValue,
-        remark: document.getElementById('remark').value,
-        imageItems: base64Items,
-        imageDoc: base64Doc
-    };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    // ---------------------------------------
 
     try {
         const res = await fetch(API_URL, {
             method: "POST",
-            body: JSON.stringify(payload)
+            signal: controller.signal,
+            body: JSON.stringify({
+                action: "create",
+                area: document.getElementById('area').value,
+                sender,
+                remark: document.getElementById('remark').value,
+                imageItems: base64Items,
+                imageDoc: base64Doc
+            })
         });
-        const result = await res.json();
 
-        clearInterval(Swal.timerInterval);
+        const result = await res.json();
+        clearTimeout(timeoutId);
+        clearInterval(Swal.ti);
 
         if (result.success) {
-            await Swal.fire({
-                icon: 'success',
-                title: 'บันทึกสำเร็จ!',
-                text: 'ข้อมูลของคุณถูกเก็บลงระบบแล้ว',
-                confirmButtonText: 'ตกลง',
-                timer: 2000
-            });
+            await Swal.fire({ icon: 'success', title: 'สำเร็จ!', timer: 2000 });
             location.reload();
         } else {
             throw new Error(result.message);
         }
-    } catch (err) {
-        clearInterval(Swal.timerInterval);
-        isSubmitting = false; 
+
+    } catch (e) {
+        clearTimeout(timeoutId);
+        clearInterval(Swal.ti);
+        isSubmitting = false;
+
+        let errorMsg = e.toString();
+        if (e.name === 'AbortError') {
+            errorMsg = "การเชื่อมต่อใช้เวลานานเกินไป (20 วินาที) กรุณาตรวจสอบอินเทอร์เน็ตและลองใหม่อีกครั้ง";
+        }
+
         Swal.fire({
             icon: 'error',
-            title: 'เกิดข้อผิดพลาด',
-            text: 'ไม่สามารถบันทึกได้: ' + err.toString(),
-            confirmButtonText: 'รับทราบ'
+            title: 'อัปโหลดล้มเหลว',
+            text: errorMsg,
+            confirmButtonText: 'ลองอีกครั้ง'
         });
     }
 }
+
